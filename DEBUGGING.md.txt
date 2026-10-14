@@ -1,0 +1,31 @@
+Vid kontroll av överlappande bokningar så upptäckte jag att programmet tillät bokningar även fast de mötesrum som
+bokningen gjordes i redan var upptaget under just den tiden. Det resulterade i att två kunder kunde boka samma rum samtidigt.
+
+När jag körde testet: Create_WhenBookingOverlapsExistingBooking_ReturnsFailure, så visade det att vissa tider som överlappade inte nekades, testet som skapar först
+en bokning i Aspen mellan 09:00 och 11:00. Det försöker sedan skapa en ny bokning med samma datum i samma rum. Det gör testet fyra gånger med fyra olika tidsintervaller.
+Det görs för att testet använder [Theory] och fyra [InlineData] som innehåller fyra bokningstider.
+
+Vissa av testets körningar misslyckades för att programmet först godkände bokningar som borde ha nekats eftersom alla fyra tidsintervaller överlappar den första Aspen
+bokningen. Förväntat resultat var att bokningsförsöken misslyckas och det ska generera ett felmeddelande som säger "The room is already booked during the selected
+time".
+
+Felet hittades i BookingService.cs. Där letade jag efter valideringsmetoden. Valideringsmetodens vilkor för overlap kontrollerade bara om den nya bokningens starttid låg
+inom befintliga bokningars tidsintervall. Det gjorde att bokningar som började tidigare men slutade under eller efter befintliga bokningar missade. Till exempel
+den befintliga bokningen som håller på mellan 09:00-11:00 och den nya bokningen som håller på melland 08:00-100. Då använder båda bokningarna rummet under samma tider.
+
+Jag ändrade i valideringsmetoden så att den nu kontrollerar om den nya bokningen startar före en befintlig bokning slutar, samt även om den slutar efer den börjar.
+Innan ändringen så stod det: booking.StartTime >= existing.StartTime && booking.StartTime < existing.Endtime);
+det är felaktigt då den koden bara kontrollerar om en ny bokning börjar inom en befintlig boknings tidsram.
+Jag ändrade till booking.StartTime < exsting.Endtime && Booking.Endtime > existing.StartTime);
+Den nya koden kontrollerar bokningarna som börjar tidigare men slutar under eller efter en befintlig bokning. Bokningar som börjar när andra slutar tillåts fortfarande.
+
+Båda måste vara uppfyllda för att bokningarna ska räknas som överlappade. Kontrollerna för samma datum, samma rum, och om bokningen är avbokad var korrekta så dem
+behöll jag.
+
+Filen sparades, jag körde testet och gjorde sedan en commit till min github. Jag kontrollerade sedan manuellt genom att försöka göra en bokning i rummet
+aspen med samma datum och tid redan befintlig bokning. Förväntat felmeddelande visades.
+
+Testet Create_WhenBookingOverlapsExistingBooking_ReturnsFailure kontrollerar fyra olika överlappande tidsintervaller och skyddar mot återkommande fel. Det andra testet som
+heter Create_WhenBookingsStartsWhenExistingBooking_Ends_ResturnsSuccess kontrollerar även att en bokning mellan 11:00 och 12:00 tillåts efter en bokning mellan 09:00-11:00.
+Överlappningar nekas men bokningar som möts vid exakt sluttid tillåts.
+
